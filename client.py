@@ -5,6 +5,11 @@ import urllib
 from urllib.parse import urlparse
 import os
 import bs4
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import http.server
+import hashlib
+import threading
+import time
 
 try:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -18,49 +23,186 @@ url5 = 'http://web.stanford.edu/class/cs224w/slides/08-GNN-application.pdf'
 url6 = 'http://web.stanford.edu/class/cs231a/assignments.html'
 url7 = 'http://web.stanford.edu/class/cs231a/project.html'
 
-url8 = 'http://web.stanford.edu/class/cs224w/slides/'
-temp_url = url8
+Url1 = 'http://www.google.com'
+Url2 = 'http://www.google.com/index.html'
+Url3 = 'http://www.bing.com'
+Url4 = 'http://anglesharp.azurewebsites.net/Chunked'
+Url5 = 'http://www.httpwatch.com/httpgallery/chunked/chunkedimage.aspx'
+
+_url1 = 'http://web.stanford.edu/class/cs224w/slides/'
+_url2 = 'http://web.stanford.edu/class/cs142/lectures/'
+_url3 = 'http://web.stanford.edu/class/cs143/handouts/'
+_url4 = 'http://web.stanford.edu/class/cs231a/course_notes/'
+
+# url testing
+
+temp_url = url3
+
 split_url = urlparse(temp_url)
 hostname = socket.gethostbyname(split_url.netloc)
 s.connect((hostname, 80))
-request = f'GET / HTTP/1.1\r\nHost:www.{split_url.netloc}\r\nConnection: keep-alive\r\n\r\n'
-s.send(request.encode())
 
-# d = urllib.request.urlopen(temp_url)
-# file_size = int(d.getheader('Content-Length'))
+# send request
+request = f'GET / HTTP/1.1\r\nHost:{split_url.netloc}\r\nConnection: keep-alive\r\n\r\n'
+# \r\nConnection: keep-alive
+s.send(request.encode('utf-8'))
 
-r = requests.get(temp_url)
-if (temp_url.split('/')[3] == ''):
-    with open('index.html', 'wb') as f:
-        f.write(r.content)
-elif (temp_url.split('/')[-1] != ''):
-    with open(temp_url.split('/')[-1], 'wb') as f:
-        f.write(r.content)
-elif (temp_url.split('/')[-1] == '' and temp_url.split('/')[3] != ''):
-    parent_dir = "C:/Users/asus/OneDrive/Máy tính/Vscode/SocketMMT"
-    pathtemp = temp_url.split('/')[-2]
-    path = os.path.join(parent_dir, pathtemp)
-    print(path)
-    os.makedirs(path)
-    data = bs4.BeautifulSoup(r.text, "html.parser")
-    for l in data.find_all("a"):
-        if(l["href"].find('.') != -1):
-            r = requests.get(temp_url + l["href"])
-            with open(path+'\\'+l["href"], 'wb') as f:
+
+def checkTypeDownload(temp_url):
+    d = urllib.request.urlopen(temp_url)
+    if (str(d.getheader('Transfer-Encoding')) == 'chunked'):
+        return -1
+    else:
+        return int(d.getheader('Content-Length'))
+
+
+def download_Contentlength(temp_url, size):
+    path = ''
+    if (temp_url.count('/') == 2 or (temp_url.count('/') >= 3 and temp_url.split('/')[3] == '')):
+        path = 'index.html'
+    if (temp_url.split('/')[-1] != ''):
+        path = temp_url.split('/')[-1]
+    with open(path, 'wb') as f:
+        str_data = ''
+        while size > 0:
+            datatmp = s.recv(1024)
+            str_data += datatmp.decode()
+            size -= len(datatmp)
+        header = str_data.encode().split(b'\r\n\r\n')[0]
+        content = str_data.encode()[len(header)+4:]
+        f.write(content)
+        print('Closing socket')
+        s.close()
+
+
+def download_Chunked(temp_url):
+    r = requests.get(temp_url)
+    path = ''
+    if (temp_url.count('/') == 2 or (temp_url.count('/') >= 3 and temp_url.split('/')[3] == '')):
+        path = 'index.html'
+    elif (temp_url.split('/')[-1] != ''):
+        path = temp_url.split('/')[-1]
+    with open(path, 'wb') as f:
+        for chunk in r.iter_content(chunk_size=1024):
+            if chunk:
+                f.write(chunk)
+    # data = ''
+    # _data = []
+    # while True:
+    #     datatmp = s.recv(1024).decode('utf-8')
+    #     # print(datatmp)
+    #     if datatmp:
+    #         #data += datatmp
+    #         _data.append(datatmp)
+    #     else:
+    #         break
+    # data = ''.join(_data)
+    # # datatmp = s.recv(2048)
+    # # if datatmp:
+    # #     data += datatmp.decode()
+    # header = data.encode().split(b'\r\n\r\n')[0]
+    # content = data.encode()[len(header)+4:]
+    # print(content)
+
+
+def download_File(temp_url):
+    if (temp_url.split('/')[-1] == '' and temp_url.split('/')[3] != ''):
+        r = requests.get(temp_url)
+        pathtemp = temp_url.split('/')[-2]
+        os.mkdir(pathtemp)
+        data = bs4.BeautifulSoup(r.text, "html.parser")
+        for l in data.find_all("a"):
+            if(l["href"].find('.') != -1):
+                if (checkTypeDownload(temp_url + l["href"]) > 0):
+                    r = requests.get(temp_url + l["href"])
+                    size = checkTypeDownload(temp_url + l["href"])
+                    with open(pathtemp+'\\'+l["href"], 'wb') as f:
+                        str_data = ''
+                        while size > 0:
+                            datatmp = s.recv(1024)
+                            str_data += datatmp.decode()
+                            size -= len(datatmp)
+                        header = str_data.encode().split(b'\r\n\r\n')[0]
+                        content = str_data.encode()[len(header)+4:]
+                        f.write(content)
+                elif (checkTypeDownload(temp_url + l["href"]) < 0):
+                    r = requests.get(temp_url + l["href"])
+                    with open(pathtemp+'\\'+l["href"], 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=1024):
+                            f.write(chunk)
+                print('closing socket')
+                s.close()
+    elif (checkTypeDownload(temp_url) > 0):
+        download_Contentlength(temp_url, checkTypeDownload(temp_url))
+    elif (checkTypeDownload(temp_url) < 0):
+        download_Chunked(temp_url)
+
+
+# print(checkTypeDownload(temp_url))
+# download_Contentlength(temp_url, checkTypeDownload(temp_url))
+# download_Chunked(temp_url)
+# download_File(temp_url)
+
+# multi request
+t1 = threading.Thread(target=download_File, args=(url1,))
+t2 = threading.Thread(target=download_File, args=(url3,))
+t1.start()
+t2.start()
+
+
+def download(temp_url):
+    r = requests.get(temp_url)
+    if (temp_url.count('/') == 2):
+        with open('index.html', 'wb') as f:
+            f.write(r.content)
+    if (temp_url.count('/') >= 3):
+        if (temp_url.split('/')[3] == ''):
+            with open('index.html', 'wb') as f:
                 f.write(r.content)
+    elif (temp_url.split('/')[-1] != ''):
+        with open(temp_url.split('/')[-1], 'wb') as f:
+            f.write(r.content)
+    elif (temp_url.split('/')[-1] == '' and temp_url.split('/')[3] != ''):
+        parent_dir = "C:/Users/asus/OneDrive/Máy tính/Vscode/SocketMMT"
+        pathtemp = temp_url.split('/')[-2]
+        path = os.path.join(parent_dir, pathtemp)
+        print(path)
+        os.makedirs(path)
+        data = bs4.BeautifulSoup(r.text, "html.parser")
+        for l in data.find_all("a"):
+            if(l["href"].find('.') != -1):
+                r = requests.get(temp_url + l["href"])
+                with open(path+'\\'+l["href"], 'wb') as f:
+                    f.write(r.content)
 
-    # if (url1.split('/')[3] == ''):
-    #     with open('index.html', "wb") as Pypdf:
-    #         for chunk in s.iter_content(chunk_size=1024):
-    #             if chunk:
-    #                 Pypdf.write(chunk)
-    # elif (url1.split('/')[-1] != ''):
-    #     with open('', "wb") as Pypdf:
-    #         for chunk in s.iter_content(chunk_size=1024):
-    #             if chunk:
-    #                 Pypdf.write(chunk)
 
-# str_data = ''
+# if (temp_url.split('/')[3] == ''):
+#     with open('index.html', 'wb') as f:
+#         while True:
+#             for chunk in r.iter_content(chunk_size=1024):
+#                 f.write(chunk)
+
+# elif (temp_url.split('/')[-1] != ''):
+#     with open(temp_url.split('/')[-1], 'wb') as f:
+#         while True:
+#             for chunk in r.iter_content(chunk_size=1024):
+#                 if chunk:
+#                     f.write(chunk)
+# elif (temp_url.split('/')[-1] == '' and temp_url.split('/')[3] != ''):
+#     parent_dir = "C:/Users/asus/OneDrive/Máy tính/Vscode/SocketMMT"
+#     pathtemp = temp_url.split('/')[-2]
+#     path = os.path.join(parent_dir, pathtemp)
+#     print(path)
+#     os.makedirs(path)
+#     data = bs4.BeautifulSoup(r.text, "html.parser")
+#     for l in data.find_all("a"):
+#         if(l["href"].find('.') != -1):
+#             r = requests.get(temp_url + l["href"])
+#             with open(path+'\\'+l["href"], 'wb') as f:
+#                 for chunk in r.iter_content(chunk_size=1024):
+#                     if chunk:
+#                         f.write(chunk)
+
 # try:
 #     while True:
 #         if file_size <= 0:
@@ -69,6 +211,7 @@ elif (temp_url.split('/')[-1] == '' and temp_url.split('/')[3] != ''):
 #         data = s.recv(1024)
 #         str_data += data.decode()
 #         file_size -= len(data)
+#     print(str_data)
 # finally:
 #     print('closing socket')
 #     s.close()
