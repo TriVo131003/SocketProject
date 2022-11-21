@@ -36,7 +36,7 @@ _url4 = 'http://web.stanford.edu/class/cs231a/course_notes/'
 
 # url testing
 
-temp_url = url3
+temp_url = url1
 
 split_url = urlparse(temp_url)
 hostname = socket.gethostbyname(split_url.netloc)
@@ -44,8 +44,7 @@ s.connect((hostname, 80))
 
 # send request
 request = f'GET / HTTP/1.1\r\nHost:{split_url.netloc}\r\nConnection: keep-alive\r\n\r\n'
-# \r\nConnection: keep-alive
-s.send(request.encode('utf-8'))
+s.sendall(request.encode())
 
 
 def checkTypeDownload(temp_url):
@@ -53,7 +52,7 @@ def checkTypeDownload(temp_url):
     if (str(d.getheader('Transfer-Encoding')) == 'chunked'):
         return -1
     else:
-        return int(d.getheader('Content-Length'))
+        return 1
 
 
 def download_Contentlength(temp_url, size):
@@ -75,6 +74,61 @@ def download_Contentlength(temp_url, size):
         s.close()
 
 
+def checkpath(path):
+    temp = str(path)
+    if(os.path.exists(temp)):
+        if(temp.find('(') == -1):
+            print(1)
+            t1 = temp.split('.')[0]
+            t2 = temp.rsplit('.')[1]
+            temp = t1+'(1).'+t2
+            i = 2
+            while(os.path.exists(temp)):
+                t1 = temp.split('(')[0]
+                t2 = temp.rsplit('.')[1]
+                temp = t1+'(' + str(i) + ').'+t2
+
+    return temp
+
+
+def getContentLength(data):
+    data_temp = data.split(b'\r\n\r\n')[0].decode()
+    start = data_temp.find('Content-Length')
+    t1 = data_temp[start + 16:]
+    i = 0
+    t2 = ''
+    t = str(t1)
+    if(t.find(':') != -1):
+        while 1:
+            if (t1[i] < '0' or t1[i] > '9'):
+                break
+            t2 += t1[i]
+            i = i + 1
+        return t2
+    return int(t1)
+
+
+def downloadtest(temp_url):
+    g = requests.get(temp_url)
+    path = ''
+    if (temp_url.count('/') == 2 or (temp_url.count('/') >= 3 and temp_url.split('/')[3] == '')):
+        path = 'index.html'
+    if (temp_url.split('/')[-1] != ''):
+        path = temp_url.split('/')[-1]
+    path = checkpath(path)
+    print(path)
+    with open(path, 'wb') as f:
+        f.write(g. content)
+    data_temp = ''
+    data = s.recv(1024)
+    data_temp += data.decode()
+    size = getContentLength(data)
+    while len(data_temp) < size:
+        data = s.recv(1024)
+        data_temp += data.decode()
+    print('Closing socket')
+
+
 def download_Chunked(temp_url):
     r = requests.get(temp_url)
     path = ''
@@ -82,6 +136,7 @@ def download_Chunked(temp_url):
         path = 'index.html'
     elif (temp_url.split('/')[-1] != ''):
         path = temp_url.split('/')[-1]
+
     with open(path, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024):
             if chunk:
@@ -138,16 +193,17 @@ def download_File(temp_url):
         download_Chunked(temp_url)
 
 
+downloadtest(temp_url)
 # print(checkTypeDownload(temp_url))
 # download_Contentlength(temp_url, checkTypeDownload(temp_url))
 # download_Chunked(temp_url)
 # download_File(temp_url)
 
 # multi request
-t1 = threading.Thread(target=download_File, args=(url1,))
-t2 = threading.Thread(target=download_File, args=(url3,))
-t1.start()
-t2.start()
+# t1 = threading.Thread(target=download_File, args=(url1,))
+# t2 = threading.Thread(target=download_File, args=(url3,))
+# t1.start()
+# t2.start()
 
 
 def download(temp_url):
@@ -215,3 +271,11 @@ def download(temp_url):
 # finally:
 #     print('closing socket')
 #     s.close()
+# data = s.recv(2048)
+# while(len(data) > 0):
+#     print(len(data))
+#     data = s.recv(2048)
+# print('closing socket')
+# s.close()
+
+# chunk_size = int(line.strip().split(';')[0], 16)
