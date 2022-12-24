@@ -4,7 +4,6 @@ from urllib.parse import urlparse
 import os
 import bs4
 import threading
-import argparse
 
 
 PORT = 80
